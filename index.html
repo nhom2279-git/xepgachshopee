@@ -201,7 +201,7 @@ function metrics(b){
 }
 function key(res){ // larger is better (lexicographic)
   const f=res.final; const kept=(res.events>0||res.xoa)?1:0;
-  return [res.score, kept, f.q>0?1:0, (f.h?1:0)+(f.v?1:0), f.q, -f.cells];
+  return [res.score, kept, f.q>0?1:0, (f.h?1:0)+(f.v?1:0), f.q, -f.cells, res.xlast?1:0];
 }
 function better(a,b){ if(!b) return true; const ka=key(a),kb=key(b); for(let i=0;i<ka.length;i++){ if(ka[i]!==kb[i]) return ka[i]>kb[i]; } return false; }
 function solve(board0,pieces,mode){
@@ -212,6 +212,8 @@ function solve(board0,pieces,mode){
   function rec(b,rem,avail){
     const k=b.join(',')+'|'+rem+'|'+(avail?1:0);
     if(memo.has(k)) return memo.get(k);
+    // Luật game: còn khối trên khay mà không khối nào đặt vừa -> thua ngay, không kịp dùng trợ giúp
+    if(rem!==0){ let any=false; for(let i=0;i<P.length&&!any;i++){ if(!(rem>>i&1)) continue; const sh=P[i].shape; for(const [r,c] of P[i].pl){ if(fits(b,sh,r,c)){any=true;break} } } if(!any){ memo.set(k,null); return null; } }
     nodes++;
     let best=null;
     if(rem===0){ best={score:0,events:0,xoa:false,final:metrics(b),path:[]}; memo.set(k,best); return best; }
@@ -224,7 +226,7 @@ function solve(board0,pieces,mode){
         const cl=clearLines(nb);
         const child=rec(nb,rem&~(1<<i),avail); if(!child) continue;
         const gain=cl.n?300+100*(cl.n-1):0;
-        const res={score:gain+child.score,events:child.events+(cl.n?1:0),xoa:child.xoa,final:child.final,
+        const res={score:gain+child.score,events:child.events+(cl.n?1:0),xoa:child.xoa,xlast:child.xlast,final:child.final,
           path:[{t:'P',i,r,c,n:cl.n}].concat(child.path)};
         if(better(res,best)) best=res;
       }
@@ -236,7 +238,7 @@ function solve(board0,pieces,mode){
           const nb=b.slice(); nb[r]|=1<<c; const cl=clearLines(nb);
           const child=rec(nb,rem,false); if(!child) continue;
           const gain=cl.n?300+100*(cl.n-1):0;
-          const res={score:gain+child.score,events:child.events+(cl.n?1:0),xoa:child.xoa,final:child.final,path:[{t:'H',r,c,n:cl.n}].concat(child.path)};
+          const res={score:gain+child.score,events:child.events+(cl.n?1:0),xoa:child.xoa,xlast:child.xlast,final:child.final,path:[{t:'H',r,c,n:cl.n}].concat(child.path)};
           if(better(res,best)) best=res;
         }
       } else if(mode==='B'){
@@ -245,7 +247,7 @@ function solve(board0,pieces,mode){
           for(const [y,x] of [[r,c],[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){ if(y<0||y>7||x<0||x>7) continue; if(nb[y]>>x&1){hit++; nb[y]&=~(1<<x);} }
           if(!hit) continue;
           const child=rec(nb,rem,false); if(!child) continue;
-          const res={score:child.score,events:child.events,xoa:child.xoa,final:child.final,path:[{t:'B',r,c}].concat(child.path)};
+          const res={score:child.score,events:child.events,xoa:child.xoa,xlast:child.xlast,final:child.final,path:[{t:'B',r,c}].concat(child.path)};
           if(better(res,best)) best=res;
         }
       } else if(mode==='X'){
@@ -253,7 +255,7 @@ function solve(board0,pieces,mode){
           if(!(rem>>i&1)) continue;
           const child=rec(b,rem&~(1<<i),false); if(!child) continue;
           // Xóa Gạch luôn làm ở cuối lượt (đặt các khối khác trước) để giữ chuỗi
-          const res={score:child.score,events:child.events,xoa:true,final:child.final,path:child.path.concat([{t:'X',i}])};
+          const res={score:child.score,events:child.events,xoa:true,final:child.final,path:[{t:'X',i}].concat(child.path), xlast:child.path.length===0};
           if(better(res,best)) best=res;
         }
       }
